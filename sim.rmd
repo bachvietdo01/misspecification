@@ -1,0 +1,1451 @@
+---
+title: "Misspecification Simulation"
+author: ""
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+geometry: "left=2.5cm,right=2.5cm,top=1.5cm,bottom=1.5cm"
+output:
+  html_document:
+    highlight: tango
+    code_folding: hide
+    number_sections: yes
+    fig_caption: TRUE
+    theme: paper
+    toc: yes
+    toc_depth: 5
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    fig_width: 14
+    fig_height: 10 
+---
+
+```{r}
+source('em.R')
+source('studenttem.R')
+source('gendata.R')
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+library(gridExtra)
+library(grid)
+
+# Global parameter setting
+N_SAMPLE = 1000
+NREP = 20
+DEV_INT = 20
+```
+
+
+# Effects of Number Sample
+
+## Truth of Mixture of Student-t
+
+```{r exp16main, cache = TRUE, results='hide'}
+n_samples = c(100, 500, 1000, 5000, 10000, 20000, 50000, 70000, 100000, 200000)
+
+k = 2; alpha = 0.5; sep = 5; df = 3; sigma = 1
+
+gres.tab <- data.frame(matrix(ncol = 8, nrow = 0))
+colnames(gres.tab) <- c('n', 'rep', 'd.mu1', 'd.mu2', 
+                                    'd.sigma1', 'd.sigma2', 
+                                    'd.alpha1', 'd.alpha2')
+
+tres.tab <- data.frame(matrix(ncol = 8, nrow = 0))
+colnames(tres.tab) <- c('n', 'rep', 'd.mu1', 'd.mu2', 
+                                    'd.sigma1', 'd.sigma2', 
+                                    'd.alpha1', 'd.alpha2')
+
+for(n in n_samples) { 
+  print(paste("Execute no of sample ", n))
+  # set truth location and scale
+  w.truth = c(alpha, 1 - alpha)
+  mu.truth = c(-sep * sigma, sep * sigma); 
+  sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 2)
+    
+  # generate data
+  X <- generate_stdt1d(sep = sep, sigma = sigma, alpha = alpha, nsample = n)
+  
+  for (rep in 1:NREP) {
+    # run GMM
+    dev.d = sep * sigma / DEV_INT
+      
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(3, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(n, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(n, rep, mu.res - mu.truth, sigma.res - sigma.truth,w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+
+```{r}
+if (! file.exists("results/exp16gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp16gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp16gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp16ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp16ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp16ttab.csv", header=TRUE)
+}
+```
+
+```{r exp16plot}
+library(gridExtra)
+library(grid)
+
+tmp.gtab <- gres.tab %>% group_by(n) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), 
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+
+)
+  
+tmp.ttab <- tres.tab %>% group_by(n) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.gtab$n, y = tmp.gtab$d.mu1, ymin = tmp.gtab$d.lowmu1, ymax = tmp.gtab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.gtab$n, y = tmp.gtab$d.mu2, ymin = tmp.gtab$d.lowmu2, ymax = tmp.gtab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample size") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p3 <- ggplot(data.frame(x = tmp.gtab$n, y = tmp.gtab$d.sigma1, ymin = tmp.gtab$d.lowsigma1, ymax = tmp.gtab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p4 <- ggplot(data.frame(x = tmp.gtab$n, y = tmp.gtab$d.sigma2, ymin = tmp.gtab$d.lowsigma2, ymax = tmp.gtab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p5 <- ggplot(data.frame(x = tmp.gtab$n, y = tmp.gtab$d.alpha1, ymin = tmp.gtab$d.lowalpha1, ymax = tmp.gtab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.gtab$n, y = tmp.gtab$d.alpha2, ymin = tmp.gtab$d.lowalpha2, ymax = tmp.gtab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$n, y = tmp.ttab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow = 3)
+```
+
+## Truth of Mixture of Gaussians
+
+```{r exp26main, cache = TRUE, results='hide'}
+n_samples = c(100, 500, 1000, 5000, 10000, 20000, 50000, 70000, 100000, 200000)
+
+k = 2; alpha = 0.5; sep = 5; df = 3; sigma = 1
+
+gres.tab <- data.frame(matrix(ncol = 8, nrow = 0))
+colnames(gres.tab) <- c('n', 'rep', 'd.mu1', 'd.mu2', 
+                                    'd.sigma1', 'd.sigma2', 
+                                    'd.alpha1', 'd.alpha2')
+
+tres.tab <- data.frame(matrix(ncol = 8, nrow = 0))
+colnames(tres.tab) <- c('n', 'rep', 'd.mu1', 'd.mu2', 
+                                    'd.sigma1', 'd.sigma2', 
+                                    'd.alpha1', 'd.alpha2')
+
+for(n in n_samples) { 
+  print(paste("Execute no of sample ", n))
+  # set truth location and scale
+  w.truth = c(alpha, 1 - alpha)
+  mu.truth = c(-sep * sigma, sep * sigma); 
+  sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 2)
+    
+  # generate data
+  X <- generate_mix2norm1d(sep = sep, sigma = sigma, alpha = alpha, nsample = n)
+  
+  for (rep in 1:NREP) {
+    # run GMM
+    dev.d = sep * sigma / DEV_INT
+      
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(3, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(n, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(n, rep, mu.res - mu.truth, sigma.res - sigma.truth,w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp26gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp26gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp26gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp26ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp26ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp26ttab.csv", header=TRUE)
+}
+```
+
+```{r exp26plot}
+tmp.gtab <- gres.tab %>% group_by(n) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), 
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+
+)
+  
+tmp.ttab <- tres.tab %>% group_by(n) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.ttab$n, y = tmp.ttab$d.mu1, ymin = tmp.ttab$d.lowmu1, ymax = tmp.ttab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.ttab$n, y = tmp.ttab$d.mu2, ymin = tmp.ttab$d.lowmu2, ymax = tmp.ttab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample size") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p3 <- ggplot(data.frame(x = tmp.ttab$n, y = tmp.ttab$d.sigma1, ymin = tmp.ttab$d.lowsigma1, ymax = tmp.ttab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p4 <- ggplot(data.frame(x = tmp.ttab$n, y = tmp.ttab$d.sigma2, ymin = tmp.ttab$d.lowsigma2, ymax = tmp.ttab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p5 <- ggplot(data.frame(x = tmp.ttab$n, y = tmp.ttab$d.alpha1, ymin = tmp.ttab$d.lowalpha1, ymax = tmp.ttab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.ttab$n, y = tmp.ttab$d.alpha2, ymin = tmp.ttab$d.lowalpha2, ymax = tmp.ttab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Sample Size") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$n, y = tmp.gtab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow = 3)
+```
+
+
+# Truth as Mixture of two Student-t Components
+
+* Gaussian Mixture Models with full parameters location, scale and mixing weights.
+* Moving the truth's two Student-t location at -sep, sep from origin where sep = 1:10 as simulated data cases.
+* Each component's Student t scale is 1.
+* For each case, run 20 reps, for each rep, initialize GMM's locations with k-means and variance with identity. The reported bias is then computed by taking the average of truth and star over 20 reps.
+
+```{r}
+X <- generate_stdt1d(sep = 5, sigma = 1, alpha = 0.4,nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp11main, cache = TRUE, results='hide'}
+k = 2
+gres.tab <- data.frame(matrix(ncol = 9, nrow = 0))
+colnames(gres.tab) <- c('alpha', 'sep', 'rep', 'd.mu1', 'd.mu2', 
+                                              'd.sigma1', 'd.sigma2', 
+                                              'd.alpha1', 'd.alpha2')
+
+tres.tab <- data.frame(matrix(ncol = 9, nrow = 0))
+colnames(tres.tab) <- c('alpha', 'sep', 'rep', 'd.mu1', 'd.mu2', 
+                                              'd.sigma1', 'd.sigma2', 
+                                              'd.alpha1', 'd.alpha2')
+
+for(alpha in seq(0.05, 0.95, 0.15)) { 
+  w.truth = c(alpha, 1 - alpha)
+  for(sep in seq(0.5, 10, 0.5)) {
+    print(paste(c("Execute sep ", sep)))
+    # set truth location and scale
+    df = 3; sigma = 1;
+    mu.truth = c(-sep * sigma, sep * sigma); 
+    sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 2)
+    
+    # generate data
+    X <- generate_stdt1d(sep = sep, sigma = sigma, alpha = alpha, nsample = N_SAMPLE)
+    
+    for (rep in 1:NREP) {
+      # run GMM
+      dev.d = sep * sigma / DEV_INT
+      
+      gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+      tmm.res <- mixstdt_em(X, df = rep(3, k), k = k, seed = rep, dev.d = dev.d)
+  
+      # saving results
+      mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+      gres.row <- c(alpha, sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+      mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+      tres.row <- c(alpha, sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,w.res - w.truth)
+      
+      gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+      tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+    }
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp11gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp11gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp11gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp11ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp11ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp11ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp11plot}
+for(alpha in seq(0.05, 0.95, 0.15)) { 
+
+  tmp.gtab <- gres.tab %>% filter(alpha == alpha) %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), 
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+
+)
+  
+tmp.ttab <- tres.tab %>% filter(alpha == alpha) %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1, ymin = tmp.gtab$d.lowmu1, ymax = tmp.gtab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2, ymin = tmp.gtab$d.lowmu2, ymax = tmp.gtab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p3 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1, ymin = tmp.gtab$d.lowsigma1, ymax = tmp.gtab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p4 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2, ymin = tmp.gtab$d.lowsigma2, ymax = tmp.gtab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p5 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1, ymin = tmp.gtab$d.lowalpha1, ymax = tmp.gtab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2, ymin = tmp.gtab$d.lowalpha2, ymax = tmp.gtab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow = 3,
+                top = textGrob(paste("pi0 = ", alpha),gp=gpar(fontsize=20,font=3)))
+}
+```
+
+# Truth as Mixture of 3 Student-t components.
+
+## Fixed the central components
+
+```{r}
+X <- generate_mix3stdt1d(sep = 7, sigma = 1)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp12main, cache = TRUE, results='hide'}
+set.seed(1)
+k = 3;
+
+gres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(gres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+tres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(tres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+for(sep in seq(0.5, 10, 0.5)) {
+  print(paste(c("Execute sep ", sep)))
+  # set truth location and scale
+  df = 3; sigma = 1;
+  mu.truth = c(-sep * sigma, 0, sep * sigma); 
+  sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 3)
+    
+  # generate data
+  X <- generate_mix3stdt1d(sep = sep, sigma = sigma, df = df, nsample = N_SAMPLE)
+    
+  for (rep in 1:NREP) {
+    dev.d = sep * sigma / DEV_INT
+    # run GMM
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    w.truth <- rep(1./3, 3)
+    
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp12gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp12gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp12gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp12ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp12ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp12ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp12plot}
+tmp.gtab <- gres.tab %>%  group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha3, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+  
+tmp.ttab <- tres.tab %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1, ymin = tmp.gtab$d.lowmu1, ymax = tmp.gtab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2, ymin = tmp.gtab$d.lowmu2, ymax = tmp.gtab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p3 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3, ymin = tmp.gtab$d.lowmu3, ymax = tmp.gtab$d.highmu3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p4 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1, ymin = tmp.gtab$d.lowsigma1, ymax = tmp.gtab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p5 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2, ymin = tmp.gtab$d.lowsigma2, ymax = tmp.gtab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3, ymin = tmp.gtab$d.lowsigma3, ymax = tmp.gtab$d.highsigma3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p7 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1, ymin = tmp.gtab$d.lowalpha1, ymax = tmp.gtab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p8 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2, ymin = tmp.gtab$d.lowalpha2, ymax = tmp.gtab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p9 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3, ymin = tmp.gtab$d.lowalpha3, ymax = tmp.gtab$d.highalpha3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+```
+
+## Fixed the last two components
+
+```{r}
+X <- generate_mix3stdt_case2(sep = 7, sigma = 1, df = 3, nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp13main, cache = TRUE, results='hide'}
+set.seed(1)
+k = 3;
+
+gres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(gres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+tres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(tres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+for(sep in seq(0.5, 10, 0.5)) {
+  print(paste(c("Execute sep ", sep)))
+  # set truth location and scale
+  df = 3; sigma = 1;
+  mu.truth = c(-sep * sigma, 0, 3 * sigma); 
+  sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 3)
+    
+  # generate data
+  X <- generate_mix3stdt_case2(sep = sep, sigma = sigma, df = df, nsample = N_SAMPLE)
+    
+  for (rep in 1:NREP) {
+    dev.d = sep * sigma / DEV_INT
+    # run GMM
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    w.truth <- rep(1./3, 3)
+    
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp13gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp13gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp13gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp13ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp13ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp13ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp13plot}
+tmp.gtab <- gres.tab %>%  group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha3, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+  
+tmp.ttab <- tres.tab %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1, ymin = tmp.gtab$d.lowmu1, ymax = tmp.gtab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2, ymin = tmp.gtab$d.lowmu2, ymax = tmp.gtab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p3 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3, ymin = tmp.gtab$d.lowmu3, ymax = tmp.gtab$d.highmu3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p4 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1, ymin = tmp.gtab$d.lowsigma1, ymax = tmp.gtab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p5 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2, ymin = tmp.gtab$d.lowsigma2, ymax = tmp.gtab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3, ymin = tmp.gtab$d.lowsigma3, ymax = tmp.gtab$d.highsigma3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p7 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1, ymin = tmp.gtab$d.lowalpha1, ymax = tmp.gtab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p8 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2, ymin = tmp.gtab$d.lowalpha2, ymax = tmp.gtab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p9 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3, ymin = tmp.gtab$d.lowalpha3, ymax = tmp.gtab$d.highalpha3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+```
+
+## Fixed the first and last components
+
+```{r}
+X <- generate_mix3stdt_case3(sep = 10, sigma = 1, df = 3, nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp14main, cache = TRUE, results='hide'}
+k = 3;
+
+gres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(gres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+tres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(tres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+for(sep in seq(-9.5, 9.5, 1)) {
+  print(paste(c("Execute sep ", sep)))
+  # set truth location and scale
+  df = 3; sigma = 1;
+  mu.truth = c(-10 * sigma, sep * sigma, 10 * sigma); 
+  sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 3)
+    
+  # generate data
+  X <- generate_mix3stdt_case3(sep = sep, sigma = sigma, df = df, nsample = N_SAMPLE)
+    
+  for (rep in 1:NREP) {
+    dev.d = abs(sep) * sigma / DEV_INT
+    # run GMM
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    w.truth <- rep(1./3, 3)
+    
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r exp14plot}
+if (! file.exists("results/exp14gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp14gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp14gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp14ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp14ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp14ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r}
+tmp.gtab <- gres.tab %>%  group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha3, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+  
+tmp.ttab <- tres.tab %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1, ymin = tmp.gtab$d.lowmu1, ymax = tmp.gtab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2, ymin = tmp.gtab$d.lowmu2, ymax = tmp.gtab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p3 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3, ymin = tmp.gtab$d.lowmu3, ymax = tmp.gtab$d.highmu3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p4 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1, ymin = tmp.gtab$d.lowsigma1, ymax = tmp.gtab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p5 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2, ymin = tmp.gtab$d.lowsigma2, ymax = tmp.gtab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3, ymin = tmp.gtab$d.lowsigma3, ymax = tmp.gtab$d.highsigma3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p7 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1, ymin = tmp.gtab$d.lowalpha1, ymax = tmp.gtab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p8 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2, ymin = tmp.gtab$d.lowalpha2, ymax = tmp.gtab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p9 <- ggplot(data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3, ymin = tmp.gtab$d.lowalpha3, ymax = tmp.gtab$d.highalpha3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+```
+
+# Effect of number of mixture components on GMM
+
+```{r}
+X <- generate_mixknorm1d(sep = sep, sigma = sigma, k = 10, nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white", bins = 200) + ggtitle(paste("Number of Components = ", k))
+```
+
+```{r exp15main, results='hide', cache=TRUE}
+gres.tab <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(gres.tab) <- c('k', 'rep', 'd.mu', 'd.sigma', 'd.w')
+
+tres.tab <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(tres.tab) <- c('k', 'rep', 'd.mu', 'd.sigma', 'd.w')
+
+
+df = 3; sigma = 1; sep = 3; alpha = 0.5;
+sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 2)
+
+for(k in 2:20) {
+  print(paste("Execute number of components ", k))
+  
+  # generate the true mean
+  mu.truth = rep(0, k)
+  w.truth = rep(1./ k,k)
+  sigma.truth = rep( sqrt(df / (df - 2))*sigma, k)
+  
+  for(c in 1:k) {
+    if (c %% 2 == 1) c.sign <- 1 else c.sign <- -1
+    
+   mu.truth[c] <- c.sign * floor(c / 2) * sep * sigma
+  }
+  mu.truth <- sort(mu.truth)
+  
+  for(rep in 1:NREP) {
+    # generate data
+    X <- generate_mixknorm1d(sep = sep, sigma = sigma, k = k, nsample = N_SAMPLE)
+  
+    # run GMM
+    dev.d = sep * sigma / DEV_INT
+    
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(k, rep, sum(abs(mu.res - mu.truth)), sum(abs(sigma.res - sigma.truth)), sum(abs(w.res - w.truth)))
+    
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)  
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(k, rep, sum(abs(mu.res - mu.truth)), sum(abs(sigma.res - sigma.truth)), sum(abs(w.res - w.truth)))
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp15gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp15gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp15gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp15ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp15ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp15ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp15plot}
+tmp.gtab <- gres.tab %>%  group_by(k) %>% summarise(
+d.lowmu = quantile(d.mu, 0.025), d.highmu = quantile(d.mu, 0.975), 
+d.lowsigma = quantile(d.sigma, 0.025), d.highsigma = quantile(d.sigma, 0.975), 
+d.lowalpha = quantile(d.w, 0.025), d.highalpha = quantile(d.w, 0.975),
+
+d.mu = mean(d.mu), d.sigma = mean(d.sigma), d.alpha = mean(d.w)
+)
+  
+tmp.ttab <- tres.tab %>%  group_by(k) %>% summarise(
+d.lowmu = quantile(d.mu, 0.025), d.highmu = quantile(d.mu, 0.975), 
+d.lowsigma = quantile(d.sigma, 0.025), d.highsigma = quantile(d.sigma, 0.975), 
+d.lowalpha = quantile(d.w, 0.025), d.highalpha = quantile(d.w, 0.975),
+
+d.mu = mean(d.mu), d.sigma = mean(d.sigma), d.alpha = mean(d.w)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.gtab$k, y = tmp.gtab$d.mu, ymin = tmp.gtab$d.lowmu, ymax = tmp.gtab$d.highmu)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("sum of |star - truth|") + ggtitle("mu")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$k, y = tmp.ttab$d.mu), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$k, y = tmp.ttab$d.mu), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p2 <- ggplot(data.frame(x = tmp.gtab$k, y = tmp.gtab$d.sigma, ymin = tmp.gtab$d.lowsigma, ymax = tmp.gtab$d.highsigma)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("sum of |star - truth|") + ggtitle("sigma")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$k, y = tmp.ttab$d.sigma), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$k, y = tmp.ttab$d.sigma), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p3 <- ggplot(data.frame(x = tmp.gtab$k, y = tmp.gtab$d.alpha, ymin = tmp.gtab$d.lowalpha, ymax = tmp.gtab$d.highalpha)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("sum of |star - truth|") + ggtitle("w")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$k, y = tmp.ttab$d.alpha), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.ttab$k, y = tmp.ttab$d.alpha), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+# Truth as Mixture of two Normal Components
+
+* Gaussian Mixture Models with full parameters location, scale and mixing weights.
+* Moving the truth's two Student-t location at -sep, sep from origin where sep = 1:10 as simulated data cases.
+* Each component's Student t scale is 1.
+* For each case, run 20 reps, for each rep, initialize GMM's locations with k-means and variance with identity. The reported bias is then computed by taking the average of truth and star over 20 reps.
+
+```{r}
+X <- generate_mix2norm1d(sep = 5, sigma = 1, alpha = 0.4,nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp21main, cache = TRUE, results='hide'}
+k = 2
+gres.tab <- data.frame(matrix(ncol = 9, nrow = 0))
+colnames(gres.tab) <- c('alpha', 'sep', 'rep', 'd.mu1', 'd.mu2', 
+                                              'd.sigma1', 'd.sigma2', 
+                                              'd.alpha1', 'd.alpha2')
+
+tres.tab <- data.frame(matrix(ncol = 9, nrow = 0))
+colnames(tres.tab) <- c('alpha', 'sep', 'rep', 'd.mu1', 'd.mu2', 
+                                              'd.sigma1', 'd.sigma2', 
+                                              'd.alpha1', 'd.alpha2')
+
+for(alpha in seq(0.05, 0.99, 0.15)) { 
+  w.truth = c(alpha, 1 - alpha)
+  for(sep in seq(0.5, 10, 0.5)) {
+    print(paste(c("Execute sep ", sep)))
+    # set truth location and scale
+    df = 3; sigma = 1;
+    mu.truth = c(-sep * sigma, sep * sigma); 
+    sigma.truth = rep(sigma, k)
+    
+    # generate data
+    X <- generate_mix2norm1d(sep = sep, sigma = sigma, alpha = alpha, nsample = N_SAMPLE)
+    
+    for (rep in 1:NREP) {
+      dev.d = sep * sigma / DEV_INT
+      # run GMM
+      gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+      tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+      # saving results
+      mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+      gres.row <- c(alpha, sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+      mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+      tres.row <- c(alpha, sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,w.res - w.truth)
+      
+      gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+      tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+    }
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp21gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp21gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp21gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp21ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp21ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp21ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp21plot}
+library(gridExtra)
+library(grid)
+
+for(alpha in seq(0.05, 0.99, 0.15)) { 
+
+  tmp.gtab <- gres.tab %>% filter(alpha == alpha) %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), 
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+)
+  
+tmp.ttab <- tres.tab %>% filter(alpha == alpha) %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.sigma1 = mean(d.sigma1), 
+d.sigma2 = mean(d.sigma2),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1, ymin = tmp.ttab$d.lowmu1, ymax = tmp.ttab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2, ymin = tmp.ttab$d.lowmu2, ymax = tmp.ttab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p3 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1, ymin = tmp.ttab$d.lowsigma1, ymax = tmp.ttab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p4 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2, ymin = tmp.ttab$d.lowsigma2, ymax = tmp.ttab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p5 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1, ymin = tmp.ttab$d.lowalpha1, ymax = tmp.ttab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2, ymin = tmp.ttab$d.lowalpha2, ymax = tmp.ttab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow = 3,
+                top = textGrob(paste("pi0 = ", alpha),gp=gpar(fontsize=20,font=3)))
+}
+```
+
+# Truth as Mixture of 3 Normal Components
+
+
+## Fixed the central components
+
+```{r}
+X <- generate_mix3norm1d(sep = 7, sigma = 1)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp22main, cache = TRUE, results='hide'}
+k = 3;
+
+gres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(gres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+tres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(tres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+for(sep in seq(0.5, 10, 0.5)) {
+  print(paste(c("Execute sep ", sep)))
+  # set truth location and scale
+  df = 3; sigma = 1;
+  mu.truth = c(-sep * sigma, 0, sep * sigma); 
+  sigma.truth = rep(sigma, k)
+    
+  # generate data
+  X <- generate_mix3norm1d(sep = sep, sigma = sigma, nsample = N_SAMPLE)
+    
+  for (rep in 1:NREP) {
+    dev.d = sep * sigma / DEV_INT
+    # run GMM
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    w.truth <- rep(1./3, 3)
+    
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp22gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp22gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp22gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp22ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp22ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp22ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp22plot}
+tmp.gtab <- gres.tab %>%  group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha3, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+  
+tmp.ttab <- tres.tab %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1, ymin = tmp.ttab$d.lowmu1, ymax = tmp.ttab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2, ymin = tmp.ttab$d.lowmu2, ymax = tmp.ttab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p3 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3, ymin = tmp.ttab$d.lowmu3, ymax = tmp.ttab$d.highmu3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p4 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1, ymin = tmp.ttab$d.lowsigma1, ymax = tmp.ttab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p5 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2, ymin = tmp.ttab$d.lowsigma2, ymax = tmp.ttab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3, ymin = tmp.ttab$d.lowsigma3, ymax = tmp.ttab$d.highsigma3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p7 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1, ymin = tmp.ttab$d.lowalpha1, ymax = tmp.ttab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p8 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2, ymin = tmp.ttab$d.lowalpha2, ymax = tmp.ttab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p9 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3, ymin = tmp.ttab$d.lowalpha3, ymax = tmp.ttab$d.highalpha3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+```
+
+## Fixed the last two components
+
+```{r}
+X <- generate_mix3norm1d_case2(sep = 7, sigma = 1, nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp23main, cache = TRUE, results='hide'}
+k = 3;
+
+gres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(gres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+tres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(tres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+for(sep in seq(0.5, 10, 0.5)) {
+  print(paste(c("Execute sep ", sep)))
+  # set truth location and scale
+  df = 3; sigma = 1;
+  mu.truth = c(-sep * sigma, 0, 3 * sigma); 
+  sigma.truth = rep(sigma, 3)
+    
+  # generate data
+  X <- generate_mix3norm1d_case2(sep = sep, sigma = sigma, nsample = N_SAMPLE)
+    
+  for (rep in 1:NREP) {
+    dev.d = sep * sigma / DEV_INT
+    # run GMM
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    w.truth <- rep(1./3, 3)
+    
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp23gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp23gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp23gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp23ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp23ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp23ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp23plot}
+tmp.gtab <- gres.tab %>%  group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha3, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+  
+tmp.ttab <- tres.tab %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1, ymin = tmp.ttab$d.lowmu1, ymax = tmp.ttab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2, ymin = tmp.ttab$d.lowmu2, ymax = tmp.ttab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p3 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3, ymin = tmp.ttab$d.lowmu3, ymax = tmp.ttab$d.highmu3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p4 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1, ymin = tmp.ttab$d.lowsigma1, ymax = tmp.ttab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p5 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2, ymin = tmp.ttab$d.lowsigma2, ymax = tmp.ttab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3, ymin = tmp.ttab$d.lowsigma3, ymax = tmp.ttab$d.highsigma3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p7 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1, ymin = tmp.ttab$d.lowalpha1, ymax = tmp.ttab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p8 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2, ymin = tmp.ttab$d.lowalpha2, ymax = tmp.ttab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p9 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3, ymin = tmp.ttab$d.lowalpha3, ymax = tmp.ttab$d.highalpha3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+```
+
+## Fixed the first and last components
+
+```{r}
+X <- generate_mix3norm1d_case3(sep = 10, sigma = 1, nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white")
+```
+
+```{r exp24main, cache = TRUE, results='hide'}
+k = 3;
+
+gres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(gres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+tres.tab <- data.frame(matrix(ncol = 11, nrow = 0))
+colnames(tres.tab) <- c('sep', 'rep', 'd.mu1', 'd.mu2', 'd.mu3', 
+                                              'd.sigma1', 'd.sigma2', 'd.sigma3',
+                                              'd.alpha1', 'd.alpha2', 'd.alpha3')
+
+for(sep in seq(-9.5, 9.5, 1)) {
+  print(paste(c("Execute sep ", sep)))
+  # set truth location and scale
+  df = 3; sigma = 1;
+  mu.truth = c(-10 * sigma, sep * sigma, 10 * sigma); 
+  sigma.truth = rep(sigma, k)
+    
+  # generate data
+  X <- generate_mix3norm1d_case3(sep = sep, sigma = sigma, nsample = N_SAMPLE)
+    
+  for (rep in 1:NREP) {
+    dev.d = abs(sep) * sigma / DEV_INT
+    # run GMM
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)
+  
+    # saving results
+    w.truth <- rep(1./3, 3)
+    
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth,
+                                    w.res - w.truth)
+      
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(sep, rep, mu.res - mu.truth, sigma.res - sigma.truth, w.res - w.truth)
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+  }
+}
+
+if (! file.exists("results/exp24gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp24gtab.csv")
+}
+
+if (! file.exists("results/exp24ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp24ttab.csv")
+}
+```
+
+```{r exp24plot}
+tmp.gtab <- gres.tab %>%  group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha3, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+  
+tmp.ttab <- tres.tab %>% group_by(sep) %>% summarise(
+d.lowmu1 = quantile(d.mu1, 0.025), d.highmu1 = quantile(d.mu1, 0.975), 
+d.lowmu2 = quantile(d.mu2, 0.025), d.highmu2 = quantile(d.mu2, 0.975), 
+d.lowmu3 = quantile(d.mu3, 0.025), d.highmu3 = quantile(d.mu3, 0.975), 
+
+d.lowsigma1 = quantile(d.sigma1, 0.025), d.highsigma1 = quantile(d.sigma1, 0.975), d.lowsigma2 = quantile(d.sigma2, 0.025), d.highsigma2 = quantile(d.sigma2, 0.975),
+d.lowsigma3 = quantile(d.sigma3, 0.025), d.highsigma3 = quantile(d.sigma3, 0.975),
+
+d.lowalpha1 = quantile(d.alpha1, 0.025), d.highalpha1 = quantile(d.alpha1, 0.975), d.lowalpha2 = quantile(d.alpha2, 0.025), d.highalpha2 = quantile(d.alpha2, 0.975),
+d.lowalpha3 = quantile(d.alpha3, 0.025), d.highalpha3 = quantile(d.alpha2, 0.975),
+
+d.mu1 = mean(d.mu1), d.mu2 = mean(d.mu2), d.mu3 = mean(d.mu3),
+d.sigma1 = mean(d.sigma1), d.sigma2 = mean(d.sigma2), d.sigma3 = mean(d.sigma3),
+d.alpha1 = mean(d.alpha1), d.alpha2 = mean(d.alpha2), d.alpha3 = mean(d.alpha3)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu1, ymin = tmp.ttab$d.lowmu1, ymax = tmp.ttab$d.highmu1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.ttab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p2 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu2, ymin = tmp.ttab$d.lowmu2, ymax = tmp.ttab$d.highmu2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p3 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.mu3, ymin = tmp.ttab$d.lowmu3, ymax = tmp.ttab$d.highmu3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("mu3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.mu3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p4 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma1, ymin = tmp.ttab$d.lowsigma1, ymax = tmp.ttab$d.highsigma1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p5 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma2, ymin = tmp.ttab$d.lowsigma2, ymax = tmp.ttab$d.highsigma2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p6 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.sigma3, ymin = tmp.ttab$d.lowsigma3, ymax = tmp.ttab$d.highsigma3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("std dev 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.sigma3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p7 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha1, ymin = tmp.ttab$d.lowalpha1, ymax = tmp.ttab$d.highalpha1)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 1")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha1), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p8 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha2, ymin = tmp.ttab$d.lowalpha2, ymax = tmp.ttab$d.highalpha2)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 2")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha2), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+p9 <- ggplot(data.frame(x = tmp.ttab$sep, y = tmp.ttab$d.alpha3, ymin = tmp.ttab$d.lowalpha3, ymax = tmp.ttab$d.highalpha3)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("star - truth") + ggtitle("alpha 3")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') +  geom_point(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$sep, y = tmp.gtab$d.alpha3), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+```
+
+# Effect of number of mixture components on TMM
+
+```{r}
+X <- generate_mixknorm1d(sep = sep, sigma = sigma, k = 10, nsample = N_SAMPLE)
+ggplot(data.frame(x = X), aes(x = x)) + geom_histogram(color="black", fill="white", bins = 200) + ggtitle(paste("Number of Components = ", k))
+```
+
+```{r exp25main, results='hide', cache=TRUE}
+gres.tab <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(gres.tab) <- c('k', 'rep', 'd.mu', 'd.sigma', 'd.w')
+
+tres.tab <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(tres.tab) <- c('k', 'rep', 'd.mu', 'd.sigma', 'd.w')
+
+
+df = 3; sigma = 1; sep = 3; alpha = 0.5;
+sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 2)
+
+for(k in 2:20) {
+  print(paste("Execute number of components ", k))
+  
+  # generate the true mean
+  mu.truth = rep(0, k)
+  w.truth = rep(1./ k,k)
+  sigma.truth = rep(sigma, k)
+  
+  for(c in 1:k) {
+    if (c %% 2 == 1) c.sign <- 1 else c.sign <- -1
+    
+   mu.truth[c] <- c.sign * floor(c / 2) * sep * sigma
+  }
+  mu.truth <- sort(mu.truth)
+  
+  for(rep in 1:NREP) {
+    # generate data
+    X <- generate_mixknorm1d(sep = sep, sigma = sigma, k = k, nsample = N_SAMPLE)
+  
+    # run GMM
+    dev.d = sep * sigma / DEV_INT
+    
+    gmm.res <- gmm(X, k = k, seed = rep, dev.d = dev.d)
+    mu.res <- gmm.res$mu; sigma.res = sqrt(gmm.res$sigma.2); w.res = gmm.res$w
+    gres.row <- c(k, rep, sum(abs(mu.res - mu.truth)), sum(abs(sigma.res - sigma.truth)), sum(abs(w.res - w.truth)))
+    
+    tmm.res <- mixstdt_em(X, df = rep(df, k), k = k, seed = rep, dev.d = dev.d)  
+    mu.res <- tmm.res$mu; sigma.res = sqrt(df / (df - 2)) * tmm.res$s; w.res = tmm.res$w
+    tres.row <- c(k, rep, sum(abs(mu.res - mu.truth)), sum(abs(sigma.res - sigma.truth)), sum(abs(w.res - w.truth)))
+      
+    gres.tab[nrow(gres.tab) + 1, ] <- gres.row
+    tres.tab[nrow(tres.tab) + 1, ] <- tres.row
+    
+    gc()
+  }
+}
+```
+
+```{r}
+if (! file.exists("results/exp25gtab.csv")) {
+  write.csv(gres.tab, file = "results/exp25gtab.csv")
+} else {
+  gres.tab = read.csv("results/exp25gtab.csv", header=TRUE)
+}
+
+if (! file.exists("results/exp25ttab.csv")) {
+  write.csv(tres.tab, file = "results/exp25ttab.csv")
+} else {
+  tres.tab = read.csv("results/exp25ttab.csv", header=TRUE)[-1,]
+}
+```
+
+```{r exp25plot}
+tmp.gtab <- gres.tab %>%  group_by(k) %>% summarise(
+d.lowmu = quantile(d.mu, 0.025), d.highmu = quantile(d.mu, 0.975), 
+d.lowsigma = quantile(d.sigma, 0.025), d.highsigma = quantile(d.sigma, 0.975), 
+d.lowalpha = quantile(d.w, 0.025), d.highalpha = quantile(d.w, 0.975),
+
+d.mu = mean(d.mu), d.sigma = mean(d.sigma), d.alpha = mean(d.w)
+)
+  
+tmp.ttab <- tres.tab %>%  group_by(k) %>% summarise(
+d.lowmu = quantile(d.mu, 0.025), d.highmu = quantile(d.mu, 0.975), 
+d.lowsigma = quantile(d.sigma, 0.025), d.highsigma = quantile(d.sigma, 0.975), 
+d.lowalpha = quantile(d.w, 0.025), d.highalpha = quantile(d.w, 0.975),
+
+d.mu = mean(d.mu), d.sigma = mean(d.sigma), d.alpha = mean(d.w)
+)
+
+colors <- c("well" = "green", "miss" = "red")
+
+
+p1 <- ggplot(data.frame(x = tmp.ttab$k, y = tmp.ttab$d.mu, ymin = tmp.ttab$d.lowmu, ymax = tmp.ttab$d.highmu)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("sum of |star - truth|") + ggtitle("mu")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$k, y = tmp.gtab$d.mu), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$k, y = tmp.gtab$d.mu), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p2 <- ggplot(data.frame(x = tmp.ttab$k, y = tmp.ttab$d.sigma, ymin = tmp.ttab$d.lowsigma, ymax = tmp.ttab$d.highsigma)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("sum of |star - truth|") + ggtitle("sigma")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$k, y = tmp.gtab$d.sigma), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$k, y = tmp.gtab$d.sigma), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+p3 <- ggplot(data.frame(x = tmp.ttab$k, y = tmp.ttab$d.alpha, ymin = tmp.ttab$d.lowalpha, ymax = tmp.ttab$d.highalpha)) + geom_line(aes(x = x, y = y, color = "miss")) +  geom_point(aes(x = x, y = y, color = "miss")) + xlab("Seperation of order of t-scale") + ylab("sum of |star - truth|") + ggtitle("w")  + geom_errorbar(aes(x = x, ymin= ymin, ymax=ymax), colour = 'gray') + 
+geom_point(data = data.frame(x = tmp.gtab$k, y = tmp.gtab$d.alpha), aes(x = x, y = y, color='well')) + geom_line(data = data.frame(x = tmp.gtab$k, y = tmp.gtab$d.alpha), aes(x = x, y = y,  color='well')) + scale_color_manual(values = colors) + theme_bw()
+
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+
+
+# GEM vs TEM
+
+```{r}
+df = 3; sigma = 1; sep = 6; alpha =0.5; k =2;
+mu.truth = c(-sep * sigma, sep * sigma); 
+sigma.truth = rep(sqrt(df / (df - 2)) * sigma, 2)
+# generate data
+X <- generate_stdt1d(sep = sep, sigma = sigma, alpha = alpha, nsample = N_SAMPLE)
+
+# run GMM vs TMM
+dev.d = sep * sigma / DEV_INT
+gmm.res <- gmm(X, k = k, seed = 2, dev.d = 0)
+tmm.res <- mixstdt_em(X, df = rep(3, k), k = k, seed = 20, dev.d = 0)
+```
+
+```{r}
+gtraj <- list('mu' = gmm.res$mu_traj, 'cov' = gmm.res$cov_traj, 'w' = gmm.res$w_traj)
+ttraj <- list('mu' = tmm.res$mu_traj, 'cov' = df * (df -2 ) * tmm.res$cov_traj, 'w' = tmm.res$w_traj)
+
+vistraj(gtraj, ttraj)
+```
+
